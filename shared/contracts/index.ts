@@ -1,7 +1,17 @@
-import type { ManufacturingStatus, QuotationStatus, Role } from "../enums";
+import type {
+  JobStatus,
+  ManufacturingStatus,
+  OrderStatus,
+  PaymentStatus,
+  QcReviewStatus,
+  QuotationStatus,
+  Role,
+  SupplierVerification,
+} from "../enums";
 
 /** Money crosses service boundaries as integer paise; never binary fractional INR. */
 export type MoneyPaise = number;
+
 export interface UserProfile {
   id: string;
   role: Role;
@@ -13,6 +23,29 @@ export interface UserProfile {
   companyName: string;
   gstin: string;
 }
+export interface Address {
+  id: string;
+  userId: string;
+  label: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+}
+export interface Supplier {
+  id: string;
+  userId: string;
+  companyName: string;
+  gstin: string;
+  city: string;
+  state: string;
+  capabilities: string;
+  verificationStatus: SupplierVerification;
+  createdAt: string;
+}
+
 export interface Category {
   slug: string;
   name: string;
@@ -50,52 +83,139 @@ export interface ProductQuery {
   page?: number;
   pageSize?: number;
 }
-export interface Quotation {
+
+/** A customer's drawing upload and the RFQ details submitted with it. */
+export interface DrawingRequest {
   id: string;
   customerId: string;
   partName: string;
   quantity: number;
   material: string;
-  status: QuotationStatus;
-  totalPaise: MoneyPaise;
-  leadTimeDays: number;
-  version: number;
-  validUntil: string;
+  tolerance: string;
+  process: string;
+  finish: string;
+  targetDate: string;
+  notes: string;
+  status: ManufacturingStatus;
+  revision: number;
+  file: { name: string; size: number; extension: string; checksum: string };
+  /** The customer allows the drawing to be analysed by the AI review assistant. */
+  aiReviewAllowed: boolean;
+  submittedAt: string;
+  updatedAt: string;
 }
 export interface StatusHistory {
-  id: string;
+  id: number;
   from: ManufacturingStatus | null;
   to: ManufacturingStatus;
-  changedByUserId: string;
+  changedBy: string;
   changedAt: string;
   comment: string;
 }
-export interface ManufacturingRequest {
+
+export interface QuotationItem {
+  description: string;
+  quantity: number;
+  unitPricePaise: MoneyPaise;
+  gstPercent: number;
+  taxPaise: MoneyPaise;
+  totalPaise: MoneyPaise;
+}
+export interface Quotation {
   id: string;
+  requestId: string;
   customerId: string;
   partName: string;
-  quantity: number;
-  status: ManufacturingStatus;
-  history: StatusHistory[];
+  version: number;
+  status: QuotationStatus;
+  items: QuotationItem[];
+  subtotalPaise: MoneyPaise;
+  taxPaise: MoneyPaise;
+  totalPaise: MoneyPaise;
+  advancePercent: number;
+  leadTimeDays: number;
+  validUntil: string;
+  terms: string;
+  createdAt: string;
 }
-export interface CartItem {
-  id: string;
+
+export interface OrderItem {
   productId: string;
+  sku: string;
+  name: string;
   quantity: number;
+  unitPricePaise: MoneyPaise;
+  gstPercent: number;
+  taxPaise: MoneyPaise;
+  totalPaise: MoneyPaise;
 }
 export interface Order {
   id: string;
   customerId: string;
-  status: "CONFIRMED" | "DISPATCHED" | "DELIVERED";
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  items: OrderItem[];
+  subtotalPaise: MoneyPaise;
+  cgstPaise: MoneyPaise;
+  sgstPaise: MoneyPaise;
+  igstPaise: MoneyPaise;
+  shippingPaise: MoneyPaise;
   totalPaise: MoneyPaise;
+  shippingAddress: Omit<Address, "id" | "userId" | "isDefault">;
+  billingGstin: string;
+  deliveryMethod: string;
+  courier: string;
   trackingNumber: string;
+  invoiceNumber: string | null;
+  createdAt: string;
 }
-export interface SupportTicket {
+export interface Payment {
   id: string;
   customerId: string;
-  subject: string;
-  status: "OPEN" | "IN_PROGRESS" | "RESOLVED";
+  orderId: string | null;
+  quotationId: string | null;
+  provider: string;
+  providerReference: string;
+  amountPaise: MoneyPaise;
+  status: PaymentStatus;
+  createdAt: string;
 }
+
+export interface Job {
+  id: string;
+  requestId: string;
+  quotationId: string;
+  supplierId: string;
+  status: JobStatus;
+  progressPercent: number;
+  targetDate: string;
+  courier: string;
+  trackingNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface QcDocument {
+  id: string;
+  jobId: string;
+  supplierId: string;
+  fileName: string;
+  fileSize: number;
+  fileExtension: string;
+  remarks: string;
+  reviewStatus: QcReviewStatus;
+  reviewComment: string;
+  uploadedAt: string;
+}
+export interface AuditEntry {
+  id: number;
+  actorId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  detail: string;
+  createdAt: string;
+}
+
 export interface ApiError {
   code: string;
   message: string;

@@ -270,6 +270,39 @@ body:has(.auth-page) {
 .auth-pane .demo-credentials code {
   color: #ffc9a3;
 }
+.auth-pane .sample-accounts {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.auth-pane .sample-accounts button {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 4%);
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+.auth-pane .sample-accounts button:hover,
+.auth-pane .sample-accounts button:focus-visible {
+  border-color: rgb(255 201 163 / 50%);
+  background: rgb(255 255 255 / 8%);
+}
+.auth-pane .sample-accounts strong {
+  display: inline-block;
+  min-width: 72px;
+  color: #ffc9a3;
+}
 
 /* Sliding image panel */
 .auth-visual {

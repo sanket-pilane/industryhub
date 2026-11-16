@@ -26,6 +26,83 @@ export const signupSchema = z
     message: "Passwords do not match.",
   });
 export type SignupInput = z.infer<typeof signupSchema>;
+
+export const MATERIALS = [
+  "EN8 Steel",
+  "Mild Steel (IS 2062)",
+  "Stainless Steel 304",
+  "Stainless Steel 316",
+  "Aluminium 6061",
+  "Brass",
+  "Cast Iron",
+  "Engineering Plastic",
+  "Other (see notes)",
+] as const;
+export const TOLERANCES = [
+  "ISO 2768-m (medium)",
+  "ISO 2768-f (fine)",
+  "±0.1 mm",
+  "±0.05 mm",
+  "±0.01 mm",
+  "As per drawing",
+] as const;
+export const PROCESSES = [
+  "CNC milling",
+  "CNC turning",
+  "Sheet metal fabrication",
+  "Laser cutting",
+  "Casting",
+  "Forging",
+  "3D printing",
+  "Welding and fabrication",
+] as const;
+export const FINISHES = [
+  "As machined",
+  "Zinc plated",
+  "Powder coated",
+  "Anodised",
+  "Black oxide",
+  "Painted",
+  "Polished",
+] as const;
+
+/** Yesterday in UTC, so "today" is accepted in every Indian time zone. */
+function earliestTargetDate() {
+  return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export const rfqSchema = z.object({
+  partName: z.string().trim().min(2, "Enter the part name.").max(120),
+  quantity: z
+    .string()
+    .trim()
+    .regex(/^\d{1,6}$/, "Enter a quantity between 1 and 100,000.")
+    .transform(Number)
+    .refine(
+      (n) => n >= 1 && n <= 100_000,
+      "Enter a quantity between 1 and 100,000.",
+    ),
+  material: z.enum(MATERIALS, { error: "Choose a material." }),
+  tolerance: z.enum(TOLERANCES, { error: "Choose a tolerance." }),
+  process: z.enum(PROCESSES, { error: "Choose a manufacturing process." }),
+  finish: z.enum(FINISHES, { error: "Choose a surface finish." }),
+  targetDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a target delivery date.")
+    .refine((d) => d >= earliestTargetDate(), "Choose today or a later date."),
+  notes: z
+    .string()
+    .trim()
+    .max(1000, "Keep notes under 1,000 characters.")
+    .default(""),
+  confidential: z
+    .boolean()
+    .refine((v) => v, "Confirm the confidentiality acknowledgement."),
+  /** Optional opt-in to AI-assisted engineering review of the drawing. */
+  aiReview: z.boolean().default(false),
+});
+export type RfqInput = z.input<typeof rfqSchema>;
+export type RfqDetails = z.output<typeof rfqSchema>;
 export const productQuerySchema = z.object({
   q: z.string().max(200).optional(),
   category: z.string().max(80).optional(),

@@ -13,8 +13,8 @@
     "lint": "npm run lint --workspace web",
     "typecheck": "npm run typecheck --workspace web",
     "test": "npm run test --workspace web",
-    "format": "prettier --write web/app web/components web/lib web/mocks web/tests shared docs README.md",
-    "format:check": "prettier --check web/app web/components web/lib web/mocks web/tests shared docs README.md"
+    "format": "prettier --write web/app web/components web/lib web/tests web/proxy.ts shared docs README.md",
+    "format:check": "prettier --check web/app web/components web/lib web/tests web/proxy.ts shared docs README.md"
   },
   "engines": {
     "node": "^24.0.0 || >=26.0.0"

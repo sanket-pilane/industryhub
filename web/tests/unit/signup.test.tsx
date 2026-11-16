@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SignupForm } from "@/components/auth/signup-form";
 import {
-  authenticateAccount,
-  findRegisteredProfile,
-  registerAccount,
-} from "@/lib/auth/mock-users";
+  authenticate,
+  findUserById,
+  registerCustomer,
+} from "@/lib/auth/accounts";
 import { signupSchema } from "@/lib/validators";
+import { createTestDb } from "../helpers/db";
 
 const push = vi.fn();
 const refresh = vi.fn();
@@ -41,20 +42,53 @@ describe("signup validation", () => {
   });
 });
 
-describe("mock account store", () => {
-  it("registers, authenticates and blocks duplicate emails", () => {
+describe("account store (SQLite)", () => {
+  it("registers a customer, authenticates and blocks duplicate emails", () => {
+    const db = createTestDb();
     const input = signupSchema.parse({ ...valid, email: "store@test.in" });
-    const created = registerAccount(input);
+    const created = registerCustomer(db, input);
     if ("error" in created) throw new Error("expected registration");
-    expect(created.profile.initials).toBe("AR");
-    expect(findRegisteredProfile(created.profile.id)?.email).toBe(
-      "store@test.in",
-    );
-    expect(authenticateAccount("STORE@test.in", valid.password)?.id).toBe(
+    expect(created.profile).toMatchObject({ initials: "AR", role: "CUSTOMER" });
+    expect(findUserById(db, created.profile.id)?.email).toBe("store@test.in");
+    expect(authenticate(db, "STORE@test.in", valid.password)?.id).toBe(
       created.profile.id,
     );
-    expect(authenticateAccount("store@test.in", "wrong")).toBeNull();
-    expect(registerAccount(input)).toEqual({ error: "EMAIL_TAKEN" });
+    expect(authenticate(db, "store@test.in", "wrong")).toBeNull();
+    expect(registerCustomer(db, input)).toEqual({ error: "EMAIL_TAKEN" });
+    expect(registerCustomer(db, { ...input, email: "Store@Test.in" })).toEqual({
+      error: "EMAIL_TAKEN",
+    });
+  });
+  it("stores a salted hash, never the password", () => {
+    const db = createTestDb();
+    const created = registerCustomer(db, signupSchema.parse(valid));
+    if ("error" in created) throw new Error("expected registration");
+    const row = db
+      .prepare("SELECT password_salt, password_hash FROM users WHERE id = ?")
+      .get(created.profile.id) as {
+      password_salt: string;
+      password_hash: string;
+    };
+    expect(row.password_hash).not.toContain(valid.password);
+    expect(row.password_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(row.password_salt).toMatch(/^[0-9a-f]{32}$/);
+  });
+  it("signs in the seeded accounts with their roles and refuses disabled ones", () => {
+    const db = createTestDb();
+    expect(
+      authenticate(db, "rohan.patil@precisionworks.in", "Industrihub@123")
+        ?.role,
+    ).toBe("SUPPLIER");
+    expect(
+      authenticate(db, "operations@industrihub.in", "Industrihub@123")?.role,
+    ).toBe("ADMIN");
+    db.prepare("UPDATE users SET is_active = 0 WHERE email = ?").run(
+      "operations@industrihub.in",
+    );
+    expect(
+      authenticate(db, "operations@industrihub.in", "Industrihub@123"),
+    ).toBeNull();
+    expect(authenticate(db, "nobody@test.in", "Industrihub@123")).toBeNull();
   });
 });
 

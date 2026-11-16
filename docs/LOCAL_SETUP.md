@@ -2,7 +2,12 @@
 
 ## Prerequisites
 
-Node.js 24 LTS (or 26+), npm, Windows PowerShell or equivalent shell. Root npm workspaces: `web`, `shared`. Root `package-lock.json` is authoritative. Run `npm ci` from the root on a clean checkout.
+You need:
+
+- Node.js 24 LTS (or 26+) and npm.
+- Windows PowerShell or an equivalent shell.
+
+The repository uses root npm workspaces (`web`, `shared`), and the root `package-lock.json` is authoritative. On a clean checkout, run `npm ci` from the root:
 
 ```powershell
 Set-Location 'D:\Srusthti Project'
@@ -11,33 +16,62 @@ Copy-Item web/.env.example web/.env.local
 npm run dev --workspace web -- --hostname 127.0.0.1 --port 3000
 ```
 
-Open `http://127.0.0.1:3000`. Both root workspace commands and `cd web; npm run dev` work. Example copy is optional because safe local defaults select mock/Development. Do not overwrite an existing `.env.local` when resuming.
+Then open `http://127.0.0.1:3000`.
+
+- Both the root workspace commands and `cd web; npm run dev` work.
+- Copying the example file is optional, because every setting has a safe local default.
+- When resuming work, do not overwrite an existing `.env.local`.
+
+## Database
+
+The app uses SQLite through Node.js's built-in `node:sqlite` module, so there is no database server to install.
+
+- **First start:** the app creates `web/.data/industrihub.db`, applies the schema migrations (`web/lib/db/schema.ts`) and seeds the starting catalogue and sample accounts.
+- **Reset:** stop the server and delete `web/.data/`.
+- **Tests:** each test uses its own in-memory database.
+- **Warning:** Node prints `ExperimentalWarning: SQLite is an experimental feature`. This is expected.
 
 ## Configuration
 
-| Variable                     | Default                               | Meaning                                                              |
-| ---------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| NEXT_PUBLIC_DATA_MODE        | mock                                  | mock or catalyst; unknown values rejected                            |
-| NEXT_PUBLIC_CATALYST_API_URL | empty                                 | Catalyst mode requires an absolute HTTPS Function URL                |
-| NEXT_PUBLIC_CATALYST_ENV     | development                           | development or production                                            |
-| MOCK_SESSION_SECRET          | local-demo-only-change-before-sharing | Server-only demo cookie HMAC key; public default for local work only |
+| Variable              | Default                    | Meaning                                                                                |
+| --------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
+| `DATABASE_PATH`       | `web/.data/industrihub.db` | SQLite database file (`:memory:` gives a throwaway database)                           |
+| `DRAWING_STORAGE_DIR` | `web/.data/drawings`       | Private folder for uploaded drawings and QC documents                                  |
+| `SESSION_SECRET`      | development key            | HMAC key for session cookies, at least 32 characters. Set it for any shared deployment |
 
-Mock login: `srushti.shinde@apexmotion.in` / `Industrihub@123`. This is a fixed demo account, not a user database or production authentication. Role/customer identity never comes from form input. Cookie is HTTP-only, SameSite=Lax, signed and expiring. Remember me persists for 7 days; unchecked uses a browser-session cookie with an 8-hour signed expiry. Sign out clears the cookie and query cache. Session creation/deletion rejects missing or foreign Origin headers.
+## Sample accounts
 
-Mock reads simulate deterministic 180ms latency. Unit tests can construct repositories with `latencyMs: 0` or `fail: true`. No external services, payment gateway, storage or cloud credentials are needed.
+Every sample account uses the password `Industrihub@123`. The login page lists them under **Sample accounts**; click one to fill the form.
 
-Environment variables prefixed `NEXT_PUBLIC_` are embedded during the build. Rebuild after changing modes. Catalyst mode validates the URL, then returns an explicit not-configured failure instead of falling back to demo data. Catalog API requests return 503; the application error boundary offers retry.
+| Role     | Email                           | Lands on    |
+| -------- | ------------------------------- | ----------- |
+| Customer | `srushti.shinde@apexmotion.in`  | `/`         |
+| Supplier | `rohan.patil@precisionworks.in` | `/supplier` |
+| Admin    | `operations@industrihub.in`     | `/admin`    |
 
-Build workers are capped at two to keep memory usage bounded on Windows.
+New sign-ups are always customer accounts.
+
+## Sessions
+
+- **Passwords:** stored as salted scrypt hashes.
+- **Cookie:** `industrihub-session` is HTTP-only and `SameSite=Lax`. It holds the user id and an expiry, signed with HMAC-SHA256.
+  - With **Remember me**, it lasts 7 days.
+  - Without it, it is a browser-session cookie with an 8-hour signed expiry.
+- **Routing:** `proxy.ts` checks the cookie before any page renders.
+  - Signed-out visitors go to `/login`.
+  - A signed-in user who opens another role's page goes to their own home.
+- **Defence in depth:** layouts, pages and API routes check the session and the role again.
+- **Same-origin check:** sign-in, sign-up, sign-out and every other request that changes data must come from the same origin.
+
+## Payments
+
+Payments go through the test-mode gateway in `web/lib/payments/gateway.ts`. It returns the outcome chosen on the payment form (success, pending, failed or cancelled) and never handles card or bank details. To use a live provider, implement the same `PaymentGateway` interface with that provider's keys.
 
 ## Quality commands
 
-From root: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run format:check`.
+From the root: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run format:check`.
 
-The development server uses port **3000** for manual browser review. Production preview: `npm run start --workspace web -- --hostname 127.0.0.1 --port 3000`. Do not install browser automation or download browsers; the user requested its removal.
-
-## Catalyst Development — pending Phase 2
-
-Discovery found no Catalyst configuration and no `CatalystbyZoho_*` tools. No infrastructure was modified. Connect Catalyst MCP, resolve existing organization/project IDs through MCP, then use the installed CLI's non-interactive help and generate configuration. Never hand-author `.catalystrc` or `catalyst.json`. Default to Development. See Project.md sections 16 and 20 for the intended authentication/function/Slate flow.
-
-The function local port has not been discovered because a function has not been initialized. There are no Development deployment URLs yet. Real credentials, table permissions, Authorized Domains, environment-specific ZAID, Stratus bucket and payment provider configuration remain future work.
+- **Manual review:** the development server runs on port **3000**.
+- **Production preview:** `npm run build --workspace web`, then `npm run start --workspace web -- --hostname 127.0.0.1 --port 3000`.
+- **Browser automation:** do not install it or download browsers; the user asked for it to be removed.
+- **Build workers:** capped at two to keep memory use bounded on Windows.

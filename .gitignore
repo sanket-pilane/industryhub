@@ -25,3 +25,6 @@ Thumbs.db
 
 # deployment
 .vercel
+
+# uploaded drawings (local file storage)
+.data/

@@ -27,7 +27,7 @@ export function SignupForm({ defaults }: { defaults?: Partial<SignupInput> }) {
   const submit = async (data: SignupInput) => {
     setError("");
     try {
-      const response = await fetch("/api/mock/signup", {
+      const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

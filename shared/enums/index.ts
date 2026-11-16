@@ -23,5 +23,50 @@ export const manufacturingStatuses = [
   "QC_REJECTED",
 ] as const;
 export type ManufacturingStatus = (typeof manufacturingStatuses)[number];
-export type QuotationStatus =
-  "PENDING" | "QUOTED" | "ACCEPTED" | "REVISION_REQUESTED" | "REJECTED";
+
+export const quotationStatuses = [
+  "QUOTED",
+  "ACCEPTED",
+  "REVISION_REQUESTED",
+  "REJECTED",
+  "SUPERSEDED",
+] as const;
+export type QuotationStatus = (typeof quotationStatuses)[number];
+
+export const orderStatuses = [
+  "CONFIRMED",
+  "PACKED",
+  "DISPATCHED",
+  "DELIVERED",
+  "CANCELLED",
+] as const;
+export type OrderStatus = (typeof orderStatuses)[number];
+
+export const paymentStatuses = [
+  "PENDING",
+  "PAID",
+  "FAILED",
+  "CANCELLED",
+] as const;
+export type PaymentStatus = (typeof paymentStatuses)[number];
+
+export const jobStatuses = [
+  "ASSIGNED",
+  "IN_PRODUCTION",
+  "QC_SUBMITTED",
+  "QC_APPROVED",
+  "QC_REJECTED",
+  "DISPATCHED",
+  "DELIVERED",
+] as const;
+export type JobStatus = (typeof jobStatuses)[number];
+
+export const supplierVerifications = [
+  "PENDING",
+  "VERIFIED",
+  "REJECTED",
+] as const;
+export type SupplierVerification = (typeof supplierVerifications)[number];
+
+export const qcReviewStatuses = ["PENDING", "APPROVED", "REJECTED"] as const;
+export type QcReviewStatus = (typeof qcReviewStatuses)[number];

@@ -16,7 +16,7 @@ const titles: Record<Mode, string> = {
  * Switching uses history.pushState (synced with usePathname by Next) so the
  * URL changes without a navigation and the transition is never interrupted.
  */
-export function AuthExperience({ mockMode }: { mockMode: boolean }) {
+export function AuthExperience() {
   const mode: Mode = usePathname().startsWith("/signup") ? "signup" : "login";
   const headings = useRef<Record<Mode, HTMLHeadingElement | null>>({
     login: null,
@@ -36,13 +36,6 @@ export function AuthExperience({ mockMode }: { mockMode: boolean }) {
     switched.current = true;
     window.history.pushState(null, "", `/${next}`);
   };
-  const unavailable = (
-    <p className="info-note" role="alert">
-      Catalyst Authentication is not configured. Connect Development resources
-      in Phase 2.
-    </p>
-  );
-
   return (
     <main className="auth-page" id="main">
       <div className="auth-card" data-mode={mode}>
@@ -69,16 +62,7 @@ export function AuthExperience({ mockMode }: { mockMode: boolean }) {
               </a>
             </p>
           </div>
-          {mockMode ? (
-            <LoginForm
-              defaults={{
-                email: "srushti.shinde@apexmotion.in",
-                password: "Industrihub@123",
-              }}
-            />
-          ) : (
-            unavailable
-          )}
+          <LoginForm />
         </section>
         <section
           className="auth-pane auth-pane-signup"
@@ -103,26 +87,12 @@ export function AuthExperience({ mockMode }: { mockMode: boolean }) {
               </a>
             </p>
           </div>
-          {mockMode ? (
-            <SignupForm
-              defaults={{
-                firstName: "Asha",
-                lastName: "Rao",
-                companyName: "Rao Precision Pvt Ltd",
-                email: "asha.rao@raoprecision.in",
-                password: "Industrihub@123",
-                confirmPassword: "Industrihub@123",
-                terms: true,
-              }}
-            />
-          ) : (
-            unavailable
-          )}
+          <SignupForm />
         </section>
         <AuthVisual />
       </div>
       <p className="auth-page-note">
-        Local demo mode · No live business data or payments.
+        Payments run through the test-mode gateway · No real money is charged.
       </p>
     </main>
   );
