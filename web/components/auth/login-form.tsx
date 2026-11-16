@@ -7,6 +7,13 @@ import { loginSchema, type LoginInput } from "@/lib/validators";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import type { ApiResponse } from "../../../shared/contracts";
+const SAMPLE_ACCOUNTS = [
+  { role: "Customer", email: "srushti.shinde@apexmotion.in" },
+  { role: "Supplier", email: "rohan.patil@precisionworks.in" },
+  { role: "Admin", email: "operations@industrihub.in" },
+] as const;
+const SAMPLE_PASSWORD = "Industrihub@123";
+
 export function LoginForm({ defaults }: { defaults?: Partial<LoginInput> }) {
   const router = useRouter();
   const [show, setShow] = useState(false);
@@ -15,6 +22,7 @@ export function LoginForm({ defaults }: { defaults?: Partial<LoginInput> }) {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -23,17 +31,18 @@ export function LoginForm({ defaults }: { defaults?: Partial<LoginInput> }) {
   const submit = async (data: LoginInput) => {
     setError("");
     try {
-      const response = await fetch("/api/mock/session", {
+      const response = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      const result: ApiResponse<{ signedIn: boolean }> = await response.json();
+      const result: ApiResponse<{ signedIn: boolean; home: string }> =
+        await response.json();
       if (!result.success) {
         setError(result.error.message);
         return;
       }
-      router.push("/");
+      router.push(result.data.home);
       router.refresh();
     } catch {
       setError("Unable to connect. Check your connection and try again.");
@@ -107,8 +116,8 @@ export function LoginForm({ defaults }: { defaults?: Partial<LoginInput> }) {
       </div>
       {help && (
         <p className="info-note" role="status">
-          Local demo: use the credentials below. Password recovery will use
-          Catalyst Authentication in Phase 2.
+          Contact your INDUSTRIHUB administrator at operations@industrihub.in to
+          reset your password.
         </p>
       )}
       {error && (
@@ -120,11 +129,27 @@ export function LoginForm({ defaults }: { defaults?: Partial<LoginInput> }) {
         {isSubmitting ? "Signing in…" : "Sign In Securely"}
       </Button>
       <details className="demo-credentials">
-        <summary>Local demo credentials</summary>
-        <p>srushti.shinde@apexmotion.in</p>
+        <summary>Sample accounts</summary>
         <p>
-          Password: <code>Industrihub@123</code>
+          Password for all: <code>{SAMPLE_PASSWORD}</code>
         </p>
+        <ul className="sample-accounts">
+          {SAMPLE_ACCOUNTS.map((account) => (
+            <li key={account.email}>
+              <button
+                type="button"
+                onClick={() => {
+                  setValue("email", account.email, { shouldValidate: true });
+                  setValue("password", SAMPLE_PASSWORD, {
+                    shouldValidate: true,
+                  });
+                }}
+              >
+                <strong>{account.role}</strong> {account.email}
+              </button>
+            </li>
+          ))}
+        </ul>
       </details>
     </form>
   );

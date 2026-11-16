@@ -8,7 +8,7 @@ describe("login form", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
   });
-  it("toggles password visibility and exposes demo recovery help", () => {
+  it("toggles password visibility and explains password recovery", () => {
     render(<LoginForm />);
     fireEvent.click(screen.getByRole("button", { name: "Show password" }));
     expect(screen.getByLabelText("Password", { exact: true })).toHaveAttribute(
@@ -16,7 +16,7 @@ describe("login form", () => {
       "text",
     );
     fireEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Local demo");
+    expect(screen.getByRole("status")).toHaveTextContent("administrator");
   });
   it("shows server credential errors without navigating", async () => {
     vi.stubGlobal(
@@ -53,5 +53,30 @@ describe("login form", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign In Securely" }));
     await screen.findByText("Enter a valid work email.");
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it("fills a sample account and goes to the home the server returns", async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      json: async () => ({
+        success: true,
+        data: { signedIn: true, role: "SUPPLIER", home: "/supplier" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<LoginForm />);
+    fireEvent.click(screen.getByText("Sample accounts"));
+    fireEvent.click(screen.getByRole("button", { name: /Supplier/ }));
+    expect(screen.getByLabelText("Work email")).toHaveValue(
+      "rohan.patil@precisionworks.in",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign In Securely" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/supplier"));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/session",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      email: "rohan.patil@precisionworks.in",
+      password: "Industrihub@123",
+    });
   });
 });

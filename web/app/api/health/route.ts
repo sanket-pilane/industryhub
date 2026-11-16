@@ -1,9 +1,17 @@
-import { env } from "@/lib/env";
-import { success } from "@/lib/api/response";
+import { success, failure } from "@/lib/api/response";
+import { getDb } from "@/lib/db";
+
 export function GET() {
-  return success({
-    service: "INDUSTRIHUB",
-    mode: env.NEXT_PUBLIC_DATA_MODE,
-    environment: env.NEXT_PUBLIC_CATALYST_ENV,
-  });
+  try {
+    const { version } = getDb()
+      .prepare("SELECT MAX(version) AS version FROM schema_migrations")
+      .get() as { version: number };
+    return success({
+      service: "INDUSTRIHUB",
+      database: "ok",
+      schemaVersion: version,
+    });
+  } catch {
+    return failure("DATABASE_UNAVAILABLE", "Database is not reachable.", 503);
+  }
 }

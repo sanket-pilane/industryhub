@@ -1,27 +1,194 @@
-# API contract — Phase 0
+# INDUSTRIHUB API
 
-Source: Project.md section 15. Implemented local routes are limited to the table below. The eventual `/api` Advanced I/O function remains Phase 2 work.
+Route handlers live in `web/app/api/**/route.ts`. The machine-readable contract is `postman/specs/industrihub.openapi.json` (OpenAPI 3.0.3, local file only). Payload types are in `shared/contracts/index.ts`.
 
-| Method/path              | Behavior                                                         | Access         |
-| ------------------------ | ---------------------------------------------------------------- | -------------- |
-| GET /api/health          | Service name, mode, development environment                      | Public         |
-| GET /api/products        | Search name/SKU/brand/spec/category; filters, sort, pagination   | Public         |
-| GET /api/products/:slug  | Product or 404                                                   | Public         |
-| GET /api/categories      | Nine seeded categories                                           | Public         |
-| GET /api/me              | Session-owned customer profile or 401                            | Demo session   |
-| POST /api/mock/session   | Validate demo credentials, issue signed HTTP-only session cookie | Mock mode only |
-| DELETE /api/mock/session | Clear demo session                                               | Mock mode only |
+## Conventions
 
-`postman/specs/industrihub.openapi.json` is the machine-readable Phase 0 contract. No shared workspace was created or published.
+**Envelope.** Every JSON response uses one of two shapes, and carries `Cache-Control: no-store`.
 
-Success: `{success:true,data,error:null,meta:{requestId,page?,pageSize?,total?}}`.
-Failure: `{success:false,data:null,error:{code,message,fields?}}`.
-Validation errors: 400; invalid demo login/session: 401; invalid origin: 403; unknown product: 404; unimplemented Catalyst adapter: 503.
+- Success: `{ "success": true, "data": ..., "error": null, "meta": { "requestId": "<uuid>", "page"?, "pageSize"?, "total"? } }`. Only `GET /api/products` sets `page`, `pageSize` and `total`.
+- Failure: `{ "success": false, "data": null, "error": { "code": "...", "message": "...", "fields"?: { "<field>": ["<message>"] } } }`.
+- Two routes return raw bytes on success instead: `GET /api/drawings/{id}/file` and `GET /api/qc/{id}/file` (`application/octet-stream`, attachment). Their failures use the failure envelope.
 
-Product query: `q`, `category`, `group`, `brand`, `inStock=true|false`, `sort=relevance|newest|price_asc|price_desc`, `page` (1+), `pageSize` (1–100, default 24). Empty results return 200 with total 0. No full-data export implicit in pagination.
+**Error mapping** (`web/lib/api/response.ts`). `ZodError` gives 400 `VALIDATION_ERROR` with per-field `fields`. A body that is not valid JSON gives 400 `VALIDATION_ERROR`. `RepositoryError` keeps its own status and code. `TransitionError` gives 409 `INVALID_TRANSITION`. Anything else gives 500 `INTERNAL_ERROR`. The Errors column below lists route-specific errors and does not repeat 401, 403 or the generic 400 unless the route has its own reason for it.
 
-Demo login accepts only `srushti.shinde@apexmotion.in` / `Industrihub@123` and a boolean `remember`. Remembered sessions expire in 7 days; otherwise the session expires in 8 hours with a browser-session cookie. The role/customer identity is fixed server-side. Mock session mutation requires same-origin requests. These public demo credentials and default signing secret are intentionally local-only. This does not constitute production authentication.
+**Auth.** `POST /api/auth/session` sets an HttpOnly cookie `industrihub-session` holding an HMAC-SHA256 signed token (`SameSite=Lax`, `Secure` on https, path `/`). The token is valid for 7 days when `remember` is true, otherwise 8 hours (without `remember` the cookie is a browser-session cookie). Roles are `CUSTOMER`, `SUPPLIER` and `ADMIN`. Every route whose Role column is not "Public" returns 401 `UNAUTHENTICATED` when signed out and 403 `FORBIDDEN` for the wrong role. `GET /api/me` returns 401 `UNAUTHENTICATED` when signed out and accepts any role.
 
-Money contract: integer paise in local service DTOs; decimal amounts in eventual Catalyst Data Store. No financial write endpoints exist yet. GST computation and payment/invoice workflows remain Phase 1/2.
+**Same-origin rule.** Every POST, PATCH and DELETE must be same-origin (`Sec-Fetch-Site: same-origin`, or a matching `Origin` header when that is absent). Otherwise the response is 403 `FORBIDDEN` ("Same-origin request required."). This check runs before authentication.
 
-Remaining endpoint set and Catalyst authentication contract: Project.md sections 15–17. Catalyst mode never silently returns mock records.
+**Ownership.** A customer or supplier who asks for a resource that is not theirs gets 404 `NOT_FOUND`, so its existence is not revealed.
+
+**Money.** Responses carry integer paise (`*Paise` fields). The only inputs in rupees are the admin fields `unitPrice` (quotation line) and `price` (product); they are strings or numbers with at most 2 decimals and are converted to paise on the server.
+
+**Payments.** Payments use a test-mode gateway and accept no card or bank details. The body carries `{ method: UPI, CARD or NETBANKING, testOutcome: success, pending, failed or cancelled }`; `testOutcome` defaults to `success`. A failed, pending or cancelled payment is still HTTP 200: read the outcome from `data.status` (advance payment) or `data.payment.status` (order payment). The status values are `PAID`, `PENDING`, `FAILED`, `CANCELLED`.
+
+**IDs.** Path `{id}` values are server-generated strings such as `RFQ-IH-1000` (request or drawing), `QT-IH-1000` (quotation), `ORD-IH-1000` (order), `JOB-IH-1000` (job), `QC-IH-1000` (QC document) and `PRD-0012` (product).
+
+## Auth & profile
+
+| Method | Path                | Role               | Body / query                                                                                                                                     | Success                                                                        | Errors                                                             |
+| ------ | ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| POST   | `/api/auth/session` | Public             | `{ email, password, remember }` (email valid, max 254; password 1-128; remember boolean, required)                                               | `{ signedIn: true, role, home }`; sets session cookie                          | 400 `VALIDATION_ERROR`; 401 `INVALID_CREDENTIALS`; 403 `FORBIDDEN` |
+| DELETE | `/api/auth/session` | Public             | none                                                                                                                                             | `{ signedIn: false }`; clears the cookie                                       | 403 `FORBIDDEN`                                                    |
+| POST   | `/api/auth/signup`  | Public             | `{ firstName, lastName, companyName, email, password, confirmPassword, terms }` (password 8-128 with a letter and a digit; `terms` must be true) | `{ signedIn: true, role: "CUSTOMER", home: "/" }`; sets a 7-day session cookie | 400 `VALIDATION_ERROR`; 403 `FORBIDDEN`; 409 `EMAIL_TAKEN`         |
+| GET    | `/api/me`           | Any signed-in role | none                                                                                                                                             | `UserProfile`                                                                  | 401 `UNAUTHENTICATED`                                              |
+
+`home` is `/admin` for ADMIN, `/supplier` for SUPPLIER and `/` for CUSTOMER. Signup always creates a CUSTOMER.
+
+## Catalog
+
+| Method | Path                   | Role   | Body / query                                                                                                                                                                                                                                | Success                                                                                          | Errors                 |
+| ------ | ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------- |
+| GET    | `/api/products`        | Public | query: `q` (max 200), `category` (slug), `group` (mechanical, electrical, automation, tools), `brand`, `inStock` (true or false), `sort` (relevance, newest, price_asc, price_desc), `page` (1+, default 1), `pageSize` (1-100, default 24) | `Product[]` with `meta.page`, `meta.pageSize`, `meta.total`; an empty result is 200 with total 0 | 400 `VALIDATION_ERROR` |
+| GET    | `/api/products/{slug}` | Public | path: `slug`                                                                                                                                                                                                                                | `Product` (active products only)                                                                 | 404 `NOT_FOUND`        |
+| GET    | `/api/categories`      | Public | none                                                                                                                                                                                                                                        | `Category[]`                                                                                     | none                   |
+
+## Drawings (RFQ)
+
+| Method | Path                      | Role                      | Body / query                                                                                                                                                                                                                                                                                                                                                                     | Success                                                                                                                                                      | Errors                                                                                                                                                                                                             |
+| ------ | ------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/api/drawings`           | CUSTOMER                  | none                                                                                                                                                                                                                                                                                                                                                                             | `DrawingRequest[]` (own, newest first)                                                                                                                       | none                                                                                                                                                                                                               |
+| POST   | `/api/drawings`           | CUSTOMER                  | multipart form: `file` (pdf, dwg, dxf, step or stp; max 50 MB; content must match the extension), `partName` (2-120), `quantity` (digits, 1-100000), `material`, `tolerance`, `process`, `finish` (fixed lists), `targetDate` (YYYY-MM-DD, today or later), `notes` (max 1000, optional), `confidential` (must be `true`), `allowDuplicate` (`true` to skip the duplicate check) | `DrawingRequest` with status `SUBMITTED`                                                                                                                     | 400 `FILE_REQUIRED`, `UNSUPPORTED_TYPE`, `EMPTY_FILE`, `TOO_LARGE` (file over 50 MB), `INVALID_FILE`, `VALIDATION_ERROR` (with `fields`); 409 `DUPLICATE_DRAWING`; 413 `TOO_LARGE` (request body over about 51 MB) |
+| GET    | `/api/drawings/{id}/file` | CUSTOMER, SUPPLIER, ADMIN | path: `id`                                                                                                                                                                                                                                                                                                                                                                       | File bytes, `application/octet-stream`, attachment. Admin reads any; customer reads own; supplier reads only when a job for that request is assigned to them | 404 `NOT_FOUND`                                                                                                                                                                                                    |
+
+Allowed `material`, `tolerance`, `process` and `finish` values are the `MATERIALS`, `TOLERANCES`, `PROCESSES` and `FINISHES` lists in `web/lib/validators/index.ts`.
+
+## Quotations (customer)
+
+| Method | Path                            | Role     | Body / query                              | Success                                                                                                                                                                             | Errors                                                                        |
+| ------ | ------------------------------- | -------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| GET    | `/api/quotations`               | CUSTOMER | none                                      | `Quotation[]` (own, newest first)                                                                                                                                                   | none                                                                          |
+| GET    | `/api/quotations/{id}`          | CUSTOMER | path: `id`                                | `{ quotation, advancePaise, balancePaise, actionBlockedReason, payments }`; `actionBlockedReason` is null when the customer can act, `payments` lists advance attempts newest first | 404 `NOT_FOUND`                                                               |
+| POST   | `/api/quotations/{id}/accept`   | CUSTOMER | none                                      | `Quotation` (status `ACCEPTED`)                                                                                                                                                     | 404 `NOT_FOUND`; 409 `CONFLICT`, `INVALID_TRANSITION`                         |
+| POST   | `/api/quotations/{id}/revision` | CUSTOMER | `{ comment }` (3-1000)                    | `Quotation` (status `REVISION_REQUESTED`)                                                                                                                                           | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `CONFLICT`, `INVALID_TRANSITION` |
+| POST   | `/api/quotations/{id}/reject`   | CUSTOMER | `{ reason }` (3-1000)                     | `Quotation` (status `REJECTED`)                                                                                                                                                     | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `CONFLICT`, `INVALID_TRANSITION` |
+| POST   | `/api/quotations/{id}/pay`      | CUSTOMER | `{ method, testOutcome? }` (see Payments) | `{ paymentId, status, amountPaise, providerReference, requestStatus }`; only `PAID` moves the request to `ADVANCE_PAID`, other outcomes leave or move it to `ADVANCE_PENDING`       | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `CONFLICT`                       |
+
+Accept, revision and reject need the quotation to be `QUOTED`, the latest version and unexpired (valid through the whole `validUntil` date in IST); otherwise 409 `CONFLICT` with the reason as the message. Pay needs an `ACCEPTED` quotation whose advance is not already paid (409 `CONFLICT`). The advance is `round-half-up(total x advancePercent / 100)` paise.
+
+## Admin requests & quotations
+
+| Method | Path                                    | Role  | Body / query                                                                                                                                                                                                                                                                                                           | Success                                                                                                                   | Errors                                                                                                      |
+| ------ | --------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/admin/requests/{id}/start-review` | ADMIN | none                                                                                                                                                                                                                                                                                                                   | `{ from, to }` (`SUBMITTED` to `UNDER_ENGINEERING_REVIEW`)                                                                | 404 `NOT_FOUND`; 409 `INVALID_TRANSITION`                                                                   |
+| POST   | `/api/admin/requests/{id}/reject`       | ADMIN | `{ reason }` (3-1000)                                                                                                                                                                                                                                                                                                  | `{ from, to }` (`to` is `REJECTED`); open quotations become `SUPERSEDED`                                                  | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `INVALID_TRANSITION`                                           |
+| POST   | `/api/admin/requests/{id}/quotations`   | ADMIN | `{ items, leadTimeDays, validUntil, advancePercent, terms? }`. `items`: 1-20 of `{ description (2-200), quantity (1-1,000,000), unitPrice (rupees, up to 2 decimals), gstPercent (0, 5, 12, 18 or 28) }`. `leadTimeDays` 1-365. `validUntil` YYYY-MM-DD, after today in IST. `advancePercent` 10-100. `terms` max 2000 | `Quotation` (next version, status `QUOTED`); earlier open versions become `SUPERSEDED`; totals are computed on the server | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `CONFLICT` (request is not under review or revision requested) |
+
+## Orders & addresses
+
+| Method | Path                   | Role     | Body / query                                                                                                                                                                          | Success                                                                                                                                                       | Errors                                                                                             |
+| ------ | ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| GET    | `/api/addresses`       | CUSTOMER | none                                                                                                                                                                                  | `Address[]` (own, default first)                                                                                                                              | none                                                                                               |
+| POST   | `/api/addresses`       | CUSTOMER | `{ label (1-60), line1 (1-200), line2? (max 200), city (1-80), state (Indian state or union territory), pincode (6 digits, not starting 0) }`                                         | `Address`; the customer's first address becomes the default                                                                                                   | 400 `VALIDATION_ERROR`                                                                             |
+| GET    | `/api/orders`          | CUSTOMER | none                                                                                                                                                                                  | `OrderSummary[]` (own, newest first)                                                                                                                          | none                                                                                               |
+| POST   | `/api/orders/quote`    | CUSTOMER | `{ items, addressId, deliveryMethod }`. `items`: 1-100 of `{ productId, quantity (1-999) }`; duplicate products are merged. `deliveryMethod`: STANDARD or EXPRESS                     | Price breakdown: `{ lines, subtotalPaise, taxPaise, cgstPaise, sgstPaise, igstPaise, shippingPaise, totalPaise, intraState, placeOfSupply }`. Creates nothing | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND` (address); 409 `PRODUCT_UNAVAILABLE`, `INSUFFICIENT_STOCK` |
+| POST   | `/api/orders`          | CUSTOMER | Same as quote, plus `billingGstin?` (15-character GSTIN or empty) and `payment` (`{ method, testOutcome? }`). Prices come from the database; the client sends ids and quantities only | `{ order: OrderDetail, payment: { status, providerReference } }`. The order is created and stock reserved even when payment is not `PAID`                     | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND` (address); 409 `PRODUCT_UNAVAILABLE`, `INSUFFICIENT_STOCK` |
+| GET    | `/api/orders/{id}`     | CUSTOMER | path: `id`                                                                                                                                                                            | `OrderDetail` (order plus `payments`, `history`, `customer`, `updatedAt`)                                                                                     | 404 `NOT_FOUND`                                                                                    |
+| POST   | `/api/orders/{id}/pay` | CUSTOMER | `{ method, testOutcome? }`                                                                                                                                                            | `{ order: OrderDetail, payment: { status, providerReference } }`                                                                                              | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `ALREADY_PAID`, `ORDER_CANCELLED`                     |
+
+Shipping: standard is 35,000 paise, free when goods total 25,00,000 paise or more; express is 90,000 paise. Shipping is not taxed. Delivery to Maharashtra splits tax into CGST and SGST; anywhere else is IGST. A `PAID` result issues an invoice number; `CANCELLED` cancels an unpaid order and releases stock; `FAILED` and `PENDING` keep stock held and the order can be retried through `/pay`.
+
+## Admin orders
+
+| Method | Path                     | Role  | Body / query                                                                                                                                           | Success                                        | Errors                                                                                                           |
+| ------ | ------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/admin/orders`      | ADMIN | query: `status?` (CONFIRMED, PACKED, DISPATCHED, DELIVERED or CANCELLED)                                                                               | `OrderSummary[]` (all customers, newest first) | 400 `VALIDATION_ERROR`                                                                                           |
+| GET    | `/api/admin/orders/{id}` | ADMIN | path: `id`                                                                                                                                             | `OrderDetail`                                  | 404 `NOT_FOUND`                                                                                                  |
+| PATCH  | `/api/admin/orders/{id}` | ADMIN | `{ status, courier? (max 80), trackingNumber? (max 80), comment? (max 500) }`. `courier` and `trackingNumber` are required when `status` is DISPATCHED | `OrderDetail`                                  | 400 `VALIDATION_ERROR` (including missing courier or tracking number); 404 `NOT_FOUND`; 409 `INVALID_TRANSITION` |
+
+`PACKED` and `DISPATCHED` also need `paymentStatus` `PAID`, otherwise 409 `INVALID_TRANSITION`. Cancelling restocks the items; a paid order stays `PAID` and its history notes that a refund is due.
+
+## Supplier jobs & QC
+
+| Method | Path                      | Role                      | Body / query                                                                                                               | Success                                                                                                                        | Errors                                                                                                                                                                                        |
+| ------ | ------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/jobs/{id}/start`    | SUPPLIER                  | none                                                                                                                       | `{ id, status: "IN_PRODUCTION" }`                                                                                              | 404 `NOT_FOUND`; 409 `INVALID_TRANSITION`                                                                                                                                                     |
+| POST   | `/api/jobs/{id}/progress` | SUPPLIER                  | `{ progressPercent, remarks }` (`progressPercent` whole number 0-99, never below the current value; `remarks` 1-1000)      | `{ progressPercent }`                                                                                                          | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `INVALID_STATE` (job not in production)                                                                                                          |
+| POST   | `/api/jobs/{id}/qc`       | SUPPLIER                  | multipart form: `file` (pdf, png, jpg, jpeg, xlsx or csv; max 20 MB; content must match the extension), `remarks` (1-1000) | `{ id }` of the new QC document; job moves to `QC_SUBMITTED` at 100%                                                           | 400 `VALIDATION_ERROR`, `UNSUPPORTED_TYPE`, `EMPTY_FILE`, `BAD_SIGNATURE`; 404 `NOT_FOUND`; 409 `INVALID_STATE` (job not in production or QC rejected), `INVALID_TRANSITION`; 413 `TOO_LARGE` |
+| POST   | `/api/jobs/{id}/dispatch` | SUPPLIER                  | `{ courier, trackingNumber }` (each 1-80)                                                                                  | `{ id, status: "DISPATCHED" }`                                                                                                 | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `INVALID_STATE` (QC not approved), `INVALID_TRANSITION`                                                                                          |
+| GET    | `/api/qc/{id}/file`       | CUSTOMER, SUPPLIER, ADMIN | path: `id`                                                                                                                 | File bytes, `application/octet-stream`, attachment. Admin reads any; the uploading supplier; the customer who owns the request | 404 `NOT_FOUND`                                                                                                                                                                               |
+| GET    | `/api/supplier/profile`   | SUPPLIER                  | none                                                                                                                       | `Supplier` (own company profile)                                                                                               | 404 `NOT_FOUND`                                                                                                                                                                               |
+| PATCH  | `/api/supplier/profile`   | SUPPLIER                  | `{ capabilities }` (max 1000 characters; empty allowed)                                                                    | `Supplier`                                                                                                                     | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`                                                                                                                                                       |
+
+For job routes, a job assigned to another supplier is reported as 404 `NOT_FOUND`. QC uploads over about 21 MB of request body, or a file over 20 MB, return 413 `TOO_LARGE`.
+
+## Admin jobs & QC
+
+| Method | Path                              | Role  | Body / query                                                                       | Success                                                                                 | Errors                                                                                                                                       |
+| ------ | --------------------------------- | ----- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/admin/jobs`                 | ADMIN | query: `status?` (job status). An unknown value is ignored (no filter)             | `JobSummary[]` (newest first)                                                           | none                                                                                                                                         |
+| POST   | `/api/admin/jobs`                 | ADMIN | `{ requestId, supplierId, targetDate }` (`targetDate` YYYY-MM-DD, not in the past) | `{ id }` of the new job (status `ASSIGNED`); the request moves to `SUPPLIER_ASSIGNMENT` | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND` (request or supplier); 409 `JOB_EXISTS`, `INVALID_STATE` (advance not paid), `SUPPLIER_NOT_VERIFIED` |
+| POST   | `/api/admin/jobs/{id}/qc/approve` | ADMIN | `{ comment? }` (max 1000); body may be empty                                       | `{ status: "QC_APPROVED" }`                                                             | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `INVALID_STATE` (nothing waiting for review), `INVALID_TRANSITION`                              |
+| POST   | `/api/admin/jobs/{id}/qc/reject`  | ADMIN | `{ comment }` (1-1000, required)                                                   | `{ status: "QC_REJECTED" }`                                                             | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `INVALID_STATE`, `INVALID_TRANSITION`                                                           |
+| POST   | `/api/admin/jobs/{id}/deliver`    | ADMIN | none                                                                               | `{ id, status: "DELIVERED" }`                                                           | 404 `NOT_FOUND`; 409 `INVALID_STATE` (job not dispatched), `INVALID_TRANSITION`                                                              |
+
+## Admin catalog & suppliers
+
+| Method | Path                        | Role  | Body / query                                                                                                                                                               | Success                              | Errors                                      |
+| ------ | --------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| POST   | `/api/admin/products`       | ADMIN | `{ sku (1-60), name (1-160), categorySlug, brand (1-80), description (1-1000), price (rupees), gstPercent (0, 5, 12, 18 or 28), stockQuantity (whole number, 0 or more) }` | `AdminProduct` (new product, active) | 400 `VALIDATION_ERROR`; 409 `DUPLICATE_SKU` |
+| PATCH  | `/api/admin/products/{id}`  | ADMIN | Any of `{ price (rupees), gstPercent, stockQuantity, isActive }`; at least one required; unknown keys are rejected                                                         | `AdminProduct`                       | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`     |
+| PATCH  | `/api/admin/suppliers/{id}` | ADMIN | `{ verificationStatus }` (VERIFIED or REJECTED)                                                                                                                            | `{ id, verificationStatus }`         | 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`     |
+
+`AdminProduct` is `{ id, slug, sku, name, categorySlug, categoryName, brand, pricePaise, gstPercent, stockQuantity, isActive }`.
+
+## Health
+
+| Method | Path          | Role   | Body / query | Success                                                     | Errors                     |
+| ------ | ------------- | ------ | ------------ | ----------------------------------------------------------- | -------------------------- |
+| GET    | `/api/health` | Public | none         | `{ service: "INDUSTRIHUB", database: "ok", schemaVersion }` | 503 `DATABASE_UNAVAILABLE` |
+
+## Status workflows
+
+Transitions are enforced on the server; an illegal move returns 409 `INVALID_TRANSITION`.
+
+**Manufacturing request** (`REQUEST_TRANSITIONS`, `web/lib/manufacturing/status.ts`)
+
+| From                                 | To                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `DRAFT`                              | `SUBMITTED`, `CANCELLED`                                                        |
+| `SUBMITTED`                          | `UNDER_ENGINEERING_REVIEW`, `REJECTED`, `CANCELLED`, `ON_HOLD`                  |
+| `UNDER_ENGINEERING_REVIEW`           | `QUOTED`, `REJECTED`, `ON_HOLD`, `CANCELLED`                                    |
+| `QUOTED`                             | `ACCEPTED`, `REVISION_REQUESTED`, `REJECTED`, `CANCELLED`                       |
+| `REVISION_REQUESTED`                 | `QUOTED`, `REJECTED`, `CANCELLED`                                               |
+| `ACCEPTED`                           | `ADVANCE_PENDING`, `ADVANCE_PAID`, `CANCELLED`                                  |
+| `ADVANCE_PENDING`                    | `ADVANCE_PAID`, `CANCELLED`                                                     |
+| `ADVANCE_PAID`                       | `SUPPLIER_ASSIGNMENT`                                                           |
+| `SUPPLIER_ASSIGNMENT`                | `IN_PRODUCTION`, `ON_HOLD`                                                      |
+| `IN_PRODUCTION`                      | `QC_IN_PROGRESS`, `ON_HOLD`                                                     |
+| `QC_IN_PROGRESS`                     | `QC_APPROVED`, `QC_REJECTED`                                                    |
+| `QC_REJECTED`                        | `QC_IN_PROGRESS`, `IN_PRODUCTION`                                               |
+| `QC_APPROVED`                        | `READY_TO_DISPATCH`, `DISPATCHED`                                               |
+| `READY_TO_DISPATCH`                  | `DISPATCHED`                                                                    |
+| `DISPATCHED`                         | `DELIVERED`                                                                     |
+| `ON_HOLD`                            | `UNDER_ENGINEERING_REVIEW`, `SUPPLIER_ASSIGNMENT`, `IN_PRODUCTION`, `CANCELLED` |
+| `DELIVERED`, `REJECTED`, `CANCELLED` | none (terminal)                                                                 |
+
+Main path: `SUBMITTED` > `UNDER_ENGINEERING_REVIEW` > `QUOTED` > `ACCEPTED` > `ADVANCE_PAID` > `SUPPLIER_ASSIGNMENT` > `IN_PRODUCTION` > `QC_IN_PROGRESS` > `QC_APPROVED` > `DISPATCHED` > `DELIVERED`. Uploading a drawing creates the request directly as `SUBMITTED`. The API does not expose moves to `DRAFT`, `ON_HOLD`, `READY_TO_DISPATCH` or `CANCELLED`.
+
+Quotation statuses: `QUOTED`, `ACCEPTED`, `REVISION_REQUESTED`, `REJECTED`, `SUPERSEDED`.
+
+**Supplier job** (`JOB_TRANSITIONS`)
+
+| From            | To                           |
+| --------------- | ---------------------------- |
+| `ASSIGNED`      | `IN_PRODUCTION`              |
+| `IN_PRODUCTION` | `QC_SUBMITTED`               |
+| `QC_SUBMITTED`  | `QC_APPROVED`, `QC_REJECTED` |
+| `QC_REJECTED`   | `QC_SUBMITTED`               |
+| `QC_APPROVED`   | `DISPATCHED`                 |
+| `DISPATCHED`    | `DELIVERED`                  |
+| `DELIVERED`     | none (terminal)              |
+
+Job and request move together: start sets the request to `IN_PRODUCTION`; a QC upload sets it to `QC_IN_PROGRESS`; QC approve or reject sets `QC_APPROVED` or `QC_REJECTED`; dispatch and deliver set `DISPATCHED` and `DELIVERED`. QC document review status is `PENDING`, `APPROVED` or `REJECTED`.
+
+**Order** (`ORDER_TRANSITIONS`, `web/lib/orders/status.ts`)
+
+| From                     | To                        |
+| ------------------------ | ------------------------- |
+| `CONFIRMED`              | `PACKED`, `CANCELLED`     |
+| `PACKED`                 | `DISPATCHED`, `CANCELLED` |
+| `DISPATCHED`             | `DELIVERED`               |
+| `DELIVERED`, `CANCELLED` | none (terminal)           |
+
+Orders start as `CONFIRMED` with payment `PENDING`. Payment status values: `PENDING`, `PAID`, `FAILED`, `CANCELLED`.

@@ -232,11 +232,6 @@ h3 {
   min-height: 76px;
   gap: 32px;
 }
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 .header-link {
   display: inline-flex;
   align-items: center;
@@ -703,6 +698,70 @@ th {
   color: #854d0e;
   background: #fef3c7;
 }
+.status-danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+.status-neutral {
+  color: #475569;
+  background: #f1f5f9;
+}
+.table-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.table-link {
+  color: var(--blue);
+  font-weight: 600;
+}
+.timeline {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  margin: 8px 0 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 2px;
+  background: var(--border);
+}
+.timeline li {
+  position: relative;
+}
+.timeline li::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: -22px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 2px #bdd4f1;
+}
+.timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.timeline time {
+  color: var(--muted);
+  font-size: 13px;
+}
+.timeline p {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
 .requirements-list {
   list-style: disc;
   padding-left: 24px;
@@ -925,7 +984,6 @@ th {
   }
   .desktop-only,
   .utility-bar,
-  .header-nav,
   .header-user,
   .manufacturing-card {
     display: none !important;
@@ -1208,39 +1266,11 @@ th {
   margin-bottom: 0;
   font-weight: 400;
 }
-.header-nav {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  margin-right: auto;
-  margin-left: 24px;
-}
-.header-nav a {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-}
-.header-nav a:hover {
-  color: var(--blue);
-}
-.site-header .header-actions {
-  gap: 10px;
-}
 .site-header .header-link .avatar {
   width: 32px;
   height: 32px;
 }
 @media (max-width: 767px) {
-  .site-header .header-actions {
-    gap: 6px;
-  }
-  .site-header .header-actions .button {
-    padding: 8px 12px;
-    font-size: 13px;
-  }
   .field-row {
     grid-template-columns: 1fr;
     gap: 0;
@@ -1417,4 +1447,108 @@ th {
 .category-card:nth-child(4),
 .featured-card:nth-child(4) {
   animation-delay: 210ms;
+}
+
+/* Uploaded file previews (drawings, QC documents) */
+.file-links {
+  display: inline-flex;
+  gap: 14px;
+}
+.file-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+.file-preview + .file-preview {
+  margin-top: 12px;
+}
+.file-preview summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.file-preview summary::-webkit-details-marker {
+  display: none;
+}
+.file-preview summary:hover {
+  background: var(--subtle);
+}
+.file-preview-ext {
+  display: inline-grid;
+  place-items: center;
+  min-width: 48px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #eaf2fc;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+.file-preview-name {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.file-preview-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-preview-name small {
+  color: var(--muted);
+}
+.file-preview-toggle {
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.file-preview-toggle::after {
+  content: " ▾";
+}
+.file-preview[open] .file-preview-toggle::after {
+  content: " ▴";
+}
+.file-preview-body {
+  padding: 0 14px 14px;
+}
+.file-preview-body iframe {
+  display: block;
+  width: 100%;
+  height: min(72vh, 760px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--subtle);
+}
+.file-preview-body img {
+  display: block;
+  max-width: 100%;
+  max-height: 72vh;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.file-preview-note {
+  margin: 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--subtle);
+  color: #334155;
+}
+.file-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .file-preview-body iframe {
+    height: 60vh;
+  }
 }

@@ -13,7 +13,7 @@ describe("auth experience", () => {
     pathname = "/login";
   });
   it("shows the login pane on /login and hides signup from interaction", () => {
-    const { container } = render(<AuthExperience mockMode />);
+    const { container } = render(<AuthExperience />);
     expect(container.querySelector(".auth-card")).toHaveAttribute(
       "data-mode",
       "login",
@@ -28,7 +28,7 @@ describe("auth experience", () => {
   });
   it("mirrors the layout on /signup", () => {
     pathname = "/signup";
-    const { container } = render(<AuthExperience mockMode />);
+    const { container } = render(<AuthExperience />);
     expect(container.querySelector(".auth-card")).toHaveAttribute(
       "data-mode",
       "signup",
@@ -39,13 +39,13 @@ describe("auth experience", () => {
   });
   it("switches modes with pushState instead of a page navigation", () => {
     const pushState = vi.spyOn(window.history, "pushState");
-    render(<AuthExperience mockMode />);
+    render(<AuthExperience />);
     fireEvent.click(screen.getByRole("link", { name: "Create an account" }));
     expect(pushState).toHaveBeenCalledWith(null, "", "/signup");
     pushState.mockRestore();
   });
   it("keeps element ids unique with both forms mounted", () => {
-    const { container } = render(<AuthExperience mockMode />);
+    const { container } = render(<AuthExperience />);
     const ids = [...container.querySelectorAll("[id]")].map((el) => el.id);
     expect(new Set(ids).size).toBe(ids.length);
   });

@@ -1,0 +1,131 @@
+/* Supplier and admin workspaces (shared shell). */
+.ws {
+  min-height: 100vh;
+  background: var(--page);
+}
+.ws-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 0 24px;
+  background: var(--navy);
+  color: white;
+}
+.ws-top .brand {
+  color: white;
+}
+.ws-role {
+  padding: 4px 10px;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ws-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.ws-user .avatar {
+  width: 34px;
+  height: 34px;
+}
+.ws-user-name {
+  display: grid;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.ws-user-name small {
+  color: #b7c4d6;
+  font-size: 12px;
+  font-weight: 400;
+}
+.ws-user .button-secondary {
+  min-height: 36px;
+  padding: 6px 14px;
+}
+.ws-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 64px);
+}
+.ws-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 12px;
+  border-right: 1px solid var(--border);
+  background: white;
+}
+.ws-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.ws-nav a:hover {
+  background: var(--subtle);
+}
+.ws-nav a[aria-current="page"] {
+  background: #eaf2fc;
+  color: var(--blue);
+}
+.ws-content {
+  min-width: 0;
+  padding: 28px 32px 64px;
+}
+.ws-content .page-title {
+  margin-bottom: 16px;
+}
+.ws-content .panel {
+  margin-block: 16px;
+}
+@media (max-width: 900px) {
+  .ws-body {
+    grid-template-columns: 1fr;
+  }
+  .ws-nav {
+    position: sticky;
+    top: 64px;
+    z-index: 10;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ws-nav a {
+    flex: none;
+    min-height: 40px;
+  }
+  .ws-content {
+    padding: 20px 16px 48px;
+  }
+  .ws-user-name {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .ws-top {
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .ws-role {
+    display: none;
+  }
+}

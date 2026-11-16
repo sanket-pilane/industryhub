@@ -17,7 +17,7 @@ export function SignOut() {
           setBusy(true);
           setError("");
           try {
-            const result = await fetch("/api/mock/session", {
+            const result = await fetch("/api/auth/session", {
               method: "DELETE",
             });
             if (!result.ok) throw new Error();

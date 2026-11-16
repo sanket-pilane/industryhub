@@ -1,33 +1,32 @@
 import { z } from "zod";
 
-const environmentSchema = z
-  .object({
-    NEXT_PUBLIC_DATA_MODE: z.enum(["mock", "catalyst"]).default("mock"),
-    NEXT_PUBLIC_CATALYST_API_URL: z.string().default(""),
-    NEXT_PUBLIC_CATALYST_ENV: z
-      .enum(["development", "production"])
-      .default("development"),
-  })
-  .superRefine((value, context) => {
-    if (value.NEXT_PUBLIC_DATA_MODE === "catalyst") {
-      const parsed = z
-        .url({ protocol: /^https$/ })
-        .safeParse(value.NEXT_PUBLIC_CATALYST_API_URL);
-      if (!parsed.success)
-        context.addIssue({
-          code: "custom",
-          path: ["NEXT_PUBLIC_CATALYST_API_URL"],
-          message: "Catalyst mode requires an absolute HTTPS Function URL.",
-        });
-    }
-  });
+/** Server configuration. All values are optional with safe local defaults. */
+const environmentSchema = z.object({
+  DATABASE_PATH: z.string().min(1).optional(),
+  DRAWING_STORAGE_DIR: z.string().min(1).optional(),
+  SESSION_SECRET: z
+    .string()
+    .min(32, "SESSION_SECRET must be at least 32 characters.")
+    .optional(),
+  /** Google Gemini API key; enables the AI drawing assistant when set. */
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  /** Gemini model for drawing reviews (default gemini-3.6-flash). */
+  GEMINI_MODEL: z.string().min(1).optional(),
+});
 
 export function parseEnvironment(source: Record<string, string | undefined>) {
-  return environmentSchema.parse(source);
+  const clean = Object.fromEntries(
+    Object.entries(source).filter(
+      ([, value]) => value !== undefined && value !== "",
+    ),
+  );
+  return environmentSchema.parse(clean);
 }
 
 export const env = parseEnvironment({
-  NEXT_PUBLIC_DATA_MODE: process.env.NEXT_PUBLIC_DATA_MODE,
-  NEXT_PUBLIC_CATALYST_API_URL: process.env.NEXT_PUBLIC_CATALYST_API_URL,
-  NEXT_PUBLIC_CATALYST_ENV: process.env.NEXT_PUBLIC_CATALYST_ENV,
+  DATABASE_PATH: process.env.DATABASE_PATH,
+  DRAWING_STORAGE_DIR: process.env.DRAWING_STORAGE_DIR,
+  SESSION_SECRET: process.env.SESSION_SECRET,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_MODEL: process.env.GEMINI_MODEL,
 });

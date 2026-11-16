@@ -24,17 +24,6 @@ export interface Repositories {
   quotations: QuotationRepository;
 }
 
-/** Future payment implementations return provider references; never accept card data. */
-export interface PaymentGateway {
-  pay(input: {
-    orderId: string;
-    amountPaise: number;
-    outcome?: "success" | "pending" | "cancelled" | "failed";
-  }): Promise<{
-    status: "success" | "pending" | "cancelled" | "failed";
-    providerReference: string;
-  }>;
-}
 export interface AiService {
   suggestFilters(query: string): Promise<ProductQuery>;
 }
